@@ -1,16 +1,26 @@
 import os
 import asyncio
 import http
+from collections import deque
 import websockets
 
 polaczeni_klienci = set()
+# Przechowuje w pamięci ostatnie 50 wiadomości
+historia_czatu = deque(maxlen=50)
 
 async def obsluga_klienta(websocket):
     polaczeni_klienci.add(websocket)
     print(f"Nowy użytkownik dołączył. Aktywnych: {len(polaczeni_klienci)}")
+    
     try:
+        # 1. Wysyłamy historię czatu osobie, która właśnie dołączyła
+        for stara_wiadomosc in historia_czatu:
+            await websocket.send(stara_wiadomosc)
+
+        # 2. Odbieramy nowe wiadomości i zapisujemy je w historii
         async for wiadomosc in websocket:
-            # Rozsyłamy wiadomość do każdego podłączonego klienta
+            historia_czatu.append(wiadomosc)
+            
             for klient in list(polaczeni_klienci):
                 try:
                     await klient.send(wiadomosc)
@@ -22,7 +32,6 @@ async def obsluga_klienta(websocket):
         polaczeni_klienci.discard(websocket)
         print(f"Użytkownik wyszedł. Aktywnych: {len(polaczeni_klienci)}")
 
-# Funkcja odpowiadająca na zwykłe wejście przez przeglądarkę / sprawdzanie stanu przez Render
 def health_check(connection, request):
     if request.path == "/healthz" or "Upgrade" not in request.headers:
         return connection.respond(http.HTTPStatus.OK, "Serwer czatu dziala poprawnie!\n")
